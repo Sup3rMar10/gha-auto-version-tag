@@ -1,0 +1,25 @@
+# Stands in for "build and publish on a new tag". It listens for tag pushes AND can be
+# started by hand or by another workflow.
+name: tag-listener
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to process
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  listen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report how this run was started
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: echo "started by '$EVENT' for tag $TAG" | tee -a "$GITHUB_STEP_SUMMARY"

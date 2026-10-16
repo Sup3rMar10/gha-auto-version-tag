@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-version
+  cancel-in-progress: false      # two quick pushes must not race for the same version
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write            # push the tag, create the release
+      actions: write             # start the follow-up workflow explicitly (see README)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0         # all tags and history
+      - run: python3 -m unittest discover -s tests
+      - name: Work out the next version
+        id: v
+        run: echo "tag=$(python3 scripts/next_version.py)" >> "$GITHUB_OUTPUT"
+      - name: Tag and release
+        if: steps.v.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag
+          # A tag pushed with GITHUB_TOKEN does NOT start workflows listening for tag pushes.
+          # Starting one explicitly with workflow_dispatch does work.
+          gh workflow run tag-listener.yml -f tag="$TAG"
+      - name: Nothing to release
+        if: steps.v.outputs.tag == ''
+        run: echo "no feat/fix/breaking commits since the last tag, so no release" | tee -a "$GITHUB_STEP_SUMMARY"
